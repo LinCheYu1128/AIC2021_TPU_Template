@@ -22,7 +22,7 @@ module global_buffer(clk, rst, wr_en, index, data_in, data_out);
 //----------------------------------------------------------------------------//
 // Global buffer (Don't change the name)                                      //
 //----------------------------------------------------------------------------//
-  reg [`GBUFF_ADDR_SIZE-1:0] gbuff [`WORD_SIZE-1:0];
+  reg [`WORD_SIZE-1:0] gbuff [`GBUFF_ADDR_SIZE-1:0];
 
 //----------------------------------------------------------------------------//
 // Global buffer read write behavior                                          //

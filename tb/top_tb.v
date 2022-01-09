@@ -7,8 +7,8 @@
 //============================================================================//
 
 `timescale 1ns/10ps
-`include "define.v"
-`include "top.v"
+`include "src/define.v"
+`include "src/top.v"
 
 module top_tb;
 

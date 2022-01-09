@@ -1,103 +1,108 @@
-# AIC2021 Project1 - TPU
-###### tags: `aic2021` 
+Student ID : H54061119 林哲宇
 
-## Project Description
-Design a Tensor Processing Unit(TPU) which has **4x4** Processing elements(PEs) that is capable to calculate ```(4*K)*(K*4)``` 8-bit integer matrix muplication. (Where is ```K``` is limited by the size of input global buffer)
+Architecture Graph
+========
+Matrix A 負責將從global buffer a 讀進來的值進行控制，將資料利用systolic array的方式丟進PE裡運算
 
-**Project Constraints**
-1. Your designs should be written in verilog language.
-2. Your PEs shouldn't more than **4x4**, where a 2D systolic array architecture is **strictly required** in this project.
-3. An 8-bit data length design.
-4. 3KiBytes in total of global buffer size.
+總共設計4*4個pe，當矩陣的K大於4時，w14,w24,w34,w44會將答案寫入w11,w21,w31,w41的psum，進行循環，再判斷是要把哪一個pe輸出寫入
 
-**Project Deadline**
-* May 7, 2021, 23:00
+PE的設計則是另外設計一個module，然後top module要用時再進行呼叫，所以總共呼叫了16個PE，在電路上
 
+![](./img/architecture.jpg)
 
-![](./img/full_system.png)
-* You should know that in real world, TPU is a Deep Learning Processor(DLP) on the common bus, data is prepared continously by CPU or DMA from DRAM.
-* In this project, you should focus only on the design and dataflow inisde the TPU, instead of full system simulation including CPU, DMA, and DRAM (Make it simple :smile: unless you need more challange).
+Dataflow
+========
+At first, read all data into matrix_a[ ] and matrix_b[ ] from global buffer GBUFF_A GBUFF_B
 
-## Project directory hierachy
 ```
-AIC2021_TPU/
-    +-- tb/
-    |   +-- matmul.py
-    |   +-- top_tb.v
-    +-- src/
-    |   +-- define.v
-    |   +-- global_buffer.v
-    |   +-- top.v
-    |
-    Makefile
+          a11     a12     a13     a14
+       --------------------------------
+a[1]   | 31:24 | 23:16 | 15: 8 | 7: 0 |
+       --------------------------------
 ```
+第一個CLK
 
-## TOP Simulation Achitecture
-![](./img/top.png)
+將a[0][31:24] 丟進計算單元w11裡
 
-* Your TPU design should be under the top module which provided by TA.
-* TOP module includes three global buffers prepared for your TPU. Each of the global buffers has its own read write port, ```256x32bit=1KiBytes``` size and result in total ```3KiBytes``` of global buffer.
-* Although the global buffer is provided by TA, you are free to design your own global buffer's behavior, except the **name of the global buffers** which already defined in testbench in order to load the data & check the correctness of the output.
+第二個CLK
+
+將a[0][23:16] 丟進計算單元w11裡
+
+將a[1][31:24] 丟進計算單元w12裡
+
+第三個LK
+
+將a[0][15: 8] 丟進計算單元w11裡
+
+將a[1][23:16] 丟進計算單元w12裡
+
+將a[2][31:24] 丟進計算單元w13裡
+
+第四個CLK
+
+將a[0][ 7: 0] 丟進計算單元w11裡
+
+將a[1][15: 8] 丟進計算單元w12裡
+
+將a[2][23:16] 丟進計算單元w13裡
+
+將a[3][31:24] 丟進計算單元w14裡
+
+第四個CLK
+
+將a[1][ 7: 0] 丟進計算單元w12裡
+
+將a[2][15: 8] 丟進計算單元w13裡
+
+將a[3][23:16] 丟進計算單元w14裡
+
+將a[4][31:24] 丟進計算單元w11裡,此時的weight 會改成 b[4][31:24]
+
+以此類堆
+
+![](./img/dataflow.jpg)
+
+上圖綠色箭頭回psum的順序，所以在電路作棟時，每一個pe都是在工作的，達到最快的運行時間
+
+Finite State Machine
+========
+總共4個state: IDLE LOAD WORK FINISH
+
+以及每個state的控制訊號
+
+在WORK會同時進行pe運算及將答案寫入global buffer out
+
+![](./img/FSM.png)
+![](./img/FSM_table.png)
+
+Simulation
+========
+
+![](./img/result.png)
+
+模擬結果，利用測資3進行測試，運行時間為975ns
+
+Synthesis
+========
+利用ncverilog進行合成
+
+合成後 report area 及 report timing 結果
+
+經過測試後發現，global buffer大概佔40萬，top使用了3個，共120萬，另外加pe及其他的element，共140萬
+
+![](./img/report_area.png)
+![](./img/report_timing.png)
+
+利用Quartus II 進行合成
+
+Device: Cyclone EP2C70F896C8
+
+合成後開啟RTL viewer 觀看合成結果
+
+![](./img/RTL_diagram.png)
+
+flow summary
+
+![](./img/flow_summary.png)
 
 
-## Testbench
-![](./img/testbench.png)
-* At the start of the simulation, tb will load the global buffer A & B, which assume that CPU or DMA has already prepared the data for TPU in global buffer. When signal ```start==1```, the size of the two matrices will be available for TPU (```m```, ```n```, ```k```).
-    * ```A(M*K)*B(K*N)```
-* You should implement your own data loader, process elements(PEs), and controller which schedules the data in global buffer A & B to be calculated in the systolic array.
-* Testbench will compare your output global buffer with golden, when you finish the calculation(```done==1```).
-
-**Prerequisite**
-* python3 with numpy library installed
-* iverilog, ncverilog (or any other verilog compiler)
-
-**Makefile**
-* ```make test1```
-    * ```A(2*2)*B(2*2)```
-* ```make test2```
-    * ```A(4*4)*B(4*4)```
-* ```make test3```
-    * ```A(4*K)*B(K*4)```, where ```K=9```
-* ```make monster``` (extra)
-    * ```A(M*K)*B(K*N)```, where ```K<10```, ```M<10```, ```N<10```
-    * Although our target is ```(4*K)*(K*4)``` matrix multiplication, when ```M``` & ```N``` is small enough to fit in the input global buffers, give a solution for that size of input matrices. :smile:
-* ```make clean```
-    * This will remove the ```build/``` folder 
-
-**Global buffer mapping**
-```
-build/
-    +-- matrix_a.bin
-    +-- matrix_b.bin
-    +-- golden.bin
-```
-* Memory Mapping - Type A (with transpose)
-![](./img/matrix_a.png)
-* Memory Mapping - Type B (Without transpose)
-![](./img/matrix_b.png)
-* As shown in the figure above, two figures give an example of ```A(6*6)*B(6*6)```, how is the memory mapping of 8-bit matrix data into 32-bit global buffer. Your output global buffer should follow the memory mapping - type B.
-
-## Grading Scores
-* Testbench1~3 (70%)
-    * Designs of dataflow in TPU
-    * Execution time ranking in class
-    * Data reuse method 
-    * Pass atleast test1~3
-* Readme (20%)
-    * **Members' Student ID**
-    * TPU architecture graph
-    * Explain your dataflow in TPU
-    * Pls descript as much as you can
-    * ...
-* Extra (20%)
-    * Support ```(M*K)*(K*N)```
-    * or other features
-        * please provided you own testbench for the extra features
-    * Good coding style
-    * Plagiarizing(copy-&-paste) others code is probihited
-        * Dont try to do that :smile:, warning from TAs -100%
-    * Synthesis (10%) 
-        * Any synthesis tools is acceptable
-        * Synthesis your TPU module only   
-        * list your cell library or FPGA
-        * timing report, area report
